@@ -1,3 +1,4 @@
+import itertools
 import json
 import logging
 import re
@@ -9,7 +10,7 @@ from django.core import signing
 from django.db import transaction
 from django.utils import timezone
 from flag_engine.segments import constants
-from flag_engine.segments.types import ConditionOperator
+from flag_engine.segments.types import ConditionOperator, RuleType
 from requests.exceptions import RequestException
 
 from environments.identities.models import Identity
@@ -31,6 +32,7 @@ from integrations.launch_darkly.client import LaunchDarklyClient
 from integrations.launch_darkly.constants import (
     LAUNCH_DARKLY_IMPORTED_DEFAULT_TAG_LABEL,
     LAUNCH_DARKLY_IMPORTED_TAG_COLOR,
+    LAUNCH_DARKLY_SEGMENT_RULE_MAX_CONDITION_GROUPS,
 )
 from integrations.launch_darkly.exceptions import LaunchDarklyRateLimitError
 from integrations.launch_darkly.models import (
@@ -43,6 +45,7 @@ from projects.models import Project
 from projects.tags.models import Tag
 from segment_membership.services import enqueue_membership_refresh
 from segments.models import Condition, Segment, SegmentRule
+from segments.services import write_segment_rules
 from segments.types import SegmentCondition
 
 # TODO: Delete alias as per https://github.com/Flagsmith/flagsmith/issues/7818
@@ -296,6 +299,50 @@ def _create_feature_segments_for_segment_match_clauses(
     return feature_states
 
 
+def _get_clause_conditions(
+    import_request: LaunchDarklyImportRequest,
+    segment_name: str,
+    clause: Clause,
+) -> Optional[list[SegmentCondition]]:
+    """
+    Convert a Launch Darkly clause to Flagsmith conditions, any one of which matches the clause.
+    Return None, and log an error, if the clause's operator can't be mapped.
+    """
+    _property = clause["attribute"]
+    operator = _ld_operator_to_flagsmith_operator(clause["op"])
+    if operator is None:
+        _log_error(
+            import_request=import_request,
+            error_message=f"Can't map launch darkly operator: {clause['op']}"
+            f" skipping for segment: {segment_name}",
+        )
+        return None
+
+    conditions: list[SegmentCondition] = []
+    for value in _convert_ld_values(
+        [str(value) for value in clause["values"]], clause["op"]
+    ):
+        if len(value) > settings.SEGMENT_CONDITION_VALUE_LIMIT:
+            _log_error(
+                import_request=import_request,
+                error_message=(
+                    f"Segment condition value '{truncate(value)}' for property '{_property}' exceeds the limit of"
+                    f" {settings.SEGMENT_CONDITION_VALUE_LIMIT} characters,"
+                    f" skipping for segment '{segment_name}'"
+                ),
+            )
+            continue
+        conditions.append(
+            {
+                "property": _property,
+                "operator": operator,
+                "value": value,
+                "description": None,
+            }
+        )
+    return conditions
+
+
 def _add_clauses_to_segment_rule(
     import_request: LaunchDarklyImportRequest,
     segment_name: str,
@@ -307,38 +354,9 @@ def _add_clauses_to_segment_rule(
     negated_subrule_index: Optional[int] = None
 
     for clause in clauses:
-        _property = clause["attribute"]
-        operator = _ld_operator_to_flagsmith_operator(clause["op"])
-        if operator is None:
-            _log_error(
-                import_request=import_request,
-                error_message=f"Can't map launch darkly operator: {clause['op']}"
-                f" skipping for segment: {segment_name}",
-            )
+        conditions = _get_clause_conditions(import_request, segment_name, clause)
+        if conditions is None:
             continue
-
-        conditions: list[SegmentCondition] = []
-        for value in _convert_ld_values(
-            [str(value) for value in clause["values"]], clause["op"]
-        ):
-            if len(value) > settings.SEGMENT_CONDITION_VALUE_LIMIT:
-                _log_error(
-                    import_request=import_request,
-                    error_message=(
-                        f"Segment condition value '{truncate(value)}' for property '{_property}' exceeds the limit of"
-                        f" {settings.SEGMENT_CONDITION_VALUE_LIMIT} characters,"
-                        f" skipping for segment '{segment_name}'"
-                    ),
-                )
-                continue
-            conditions.append(
-                {
-                    "property": _property,
-                    "operator": operator,
-                    "value": value,
-                    "description": None,
-                }
-            )
 
         if clause["negate"] is True:
             if negated_subrule_index is None:
@@ -355,8 +373,12 @@ def _add_users_to_segment_rule(
     users: list[str],
     negate: bool,
     rule: SegmentRuleType,
+    match_type: RuleType = constants.ANY_RULE,
 ) -> None:
-    """Add Launch Darkly's targeted user lists to a segment's "ALL" root rule as subrules."""
+    """
+    Add Launch Darkly's targeted user lists to a segment's root rule as subrules.
+    `match_type` is the type of the subrules for users who aren't negated.
+    """
     for identities_string in iter_chunked_concat(
         values=users,
         delimiter=",",
@@ -374,7 +396,7 @@ def _add_users_to_segment_rule(
             continue
         rule["rules"].append(
             {
-                "type": constants.NONE_RULE if negate else constants.ANY_RULE,
+                "type": constants.NONE_RULE if negate else match_type,
                 "conditions": [
                     {
                         "property": "key",
@@ -1050,39 +1072,167 @@ def _create_features_from_ld(
     ]
 
 
-def _include_users_to_segment(
+def _get_negated_clause_conditions(
+    clause: Clause,
+) -> Optional[list[SegmentCondition]]:
+    """
+    Convert a negated Launch Darkly clause to Flagsmith conditions, all of which must match.
+    Return None if Flagsmith has no operator to negate the clause's operator with.
+    """
+    operator: ConditionOperator
+    match clause["op"]:
+        case "in":
+            operator = constants.NOT_EQUAL
+        case "contains":
+            operator = constants.NOT_CONTAINS
+        case _:
+            return None
+    return [
+        {
+            "property": clause["attribute"],
+            "operator": operator,
+            "value": str(value),
+            "description": None,
+        }
+        for value in clause["values"]
+    ]
+
+
+def _get_condition_groups(
     import_request: LaunchDarklyImportRequest,
-    segment: Segment,
-    users: list[str],
-    negate: bool,
-) -> None:
-    if len(users) == 0:
-        return
-
-    # Find the parent rule of the segment.
-    parent_rule, _ = SegmentRule.objects.get_or_create(
-        segment=segment, type=SegmentRule.ALL_RULE
-    )
-
-    # Create a condition to match against those identities via "key" trait.
-    for identities_string in iter_chunked_concat(
-        values=users,
-        delimiter=",",
-        max_len=settings.SEGMENT_CONDITION_VALUE_LIMIT,
-    ):
-        if len(identities_string) > settings.SEGMENT_CONDITION_VALUE_LIMIT:
+    segment_name: str,
+    clauses: list[Clause],
+) -> Optional[list[list[SegmentCondition]]]:
+    """
+    Convert a Launch Darkly segment rule to groups of Flagsmith conditions. The rule matches
+    if all conditions of any group match. Return None, and log an error, if the rule can't
+    be expressed this way.
+    """
+    # Each item holds the alternatives for a clause; each alternative is a list of
+    # conditions that must all match.
+    alternatives_per_clause: list[list[list[SegmentCondition]]] = []
+    for clause in clauses:
+        if clause["negate"] is True:
+            negated_conditions = _get_negated_clause_conditions(clause)
+            if negated_conditions is None:
+                _log_error(
+                    import_request=import_request,
+                    error_message=f"Can't negate launch darkly operator: {clause['op']}"
+                    f" skipping rule for segment: {segment_name}",
+                )
+                return None
+            alternatives_per_clause.append([negated_conditions])
             continue
-        included_rule = SegmentRule.objects.create(
-            rule=parent_rule,
-            type=SegmentRule.NONE_RULE if negate else SegmentRule.ANY_RULE,
+
+        conditions = _get_clause_conditions(import_request, segment_name, clause)
+        if not conditions:
+            # The clause was skipped, as before this rule was combined with others.
+            continue
+        alternatives_per_clause.append([[condition] for condition in conditions])
+
+    group_count = 1
+    for alternatives in alternatives_per_clause:
+        group_count *= len(alternatives)
+    if group_count > LAUNCH_DARKLY_SEGMENT_RULE_MAX_CONDITION_GROUPS:
+        _log_error(
+            import_request=import_request,
+            error_message=f"Segment rule is too complex to import ({group_count} condition groups),"
+            f" skipping rule for segment: {segment_name}",
         )
-        Condition.objects.update_or_create(
-            rule=included_rule,
-            property="key",
-            value=identities_string,
-            operator=constants.IN,
-            created_with_segment=True,
+        return None
+
+    return [
+        [condition for alternative in combination for condition in alternative]
+        for combination in itertools.product(*alternatives_per_clause)
+    ]
+
+
+def _get_segment_rules(
+    import_request: LaunchDarklyImportRequest,
+    segment_name: str,
+    ld_segment: ld_types.UserSegment,
+) -> list[SegmentRuleType]:
+    """
+    Convert a Launch Darkly segment to Flagsmith segment rules.
+
+    Launch Darkly matches a context that is included, or that is not excluded and
+    matches any of the segment's rules.
+    """
+    ld_rules = ld_segment["rules"]
+    included = ld_segment["included"]
+
+    if len(ld_rules) + (1 if included else 0) <= 1:
+        # A single source of matches maps to one "ALL" root rule.
+        root_rule: SegmentRuleType = {
+            "type": constants.ALL_RULE,
+            "conditions": [],
+            "rules": [],
+        }
+        for ld_rule in ld_rules:
+            _add_clauses_to_segment_rule(
+                import_request=import_request,
+                segment_name=segment_name,
+                clauses=ld_rule["clauses"],
+                rule=root_rule,
+            )
+        _add_users_to_segment_rule(
+            import_request=import_request,
+            segment_name=segment_name,
+            users=included,
+            negate=False,
+            rule=root_rule,
         )
+        _add_users_to_segment_rule(
+            import_request=import_request,
+            segment_name=segment_name,
+            users=ld_segment["excluded"],
+            negate=True,
+            rule=root_rule,
+        )
+        return [root_rule]
+
+    # Several sources of matches are combined with an "ANY" root rule,
+    # each source being an "ALL" subrule.
+    any_rule: SegmentRuleType = {
+        "type": constants.ANY_RULE,
+        "conditions": [],
+        "rules": [],
+    }
+    for ld_rule in ld_rules:
+        condition_groups = _get_condition_groups(
+            import_request=import_request,
+            segment_name=segment_name,
+            clauses=ld_rule["clauses"],
+        )
+        for conditions in condition_groups or []:
+            any_rule["rules"].append(
+                {"type": constants.ALL_RULE, "conditions": conditions}
+            )
+    _add_users_to_segment_rule(
+        import_request=import_request,
+        segment_name=segment_name,
+        users=included,
+        negate=False,
+        rule=any_rule,
+        match_type=constants.ALL_RULE,
+    )
+    rules = [any_rule]
+
+    excluded_rule: SegmentRuleType = {
+        "type": constants.ALL_RULE,
+        "conditions": [],
+        "rules": [],
+    }
+    _add_users_to_segment_rule(
+        import_request=import_request,
+        segment_name=segment_name,
+        users=ld_segment["excluded"],
+        negate=True,
+        rule=excluded_rule,
+    )
+    if excluded_rule["rules"]:
+        rules.append(excluded_rule)
+    return rules
 
 
 def _create_segments_from_ld(
@@ -1113,28 +1263,6 @@ def _create_segments_from_ld(
 
         # TODO: Tagging segments is not supported yet. https://github.com/Flagsmith/flagsmith/issues/3241
 
-        root_rule: SegmentRuleType = {
-            "type": constants.ALL_RULE,
-            "conditions": [],
-            "rules": [],
-        }
-
-        # Create the segment rule for the segment.
-        rules = ld_segment["rules"]
-        for rule in rules:
-            _add_clauses_to_segment_rule(
-                import_request=import_request,
-                segment_name=segment.name,
-                clauses=rule["clauses"],
-                rule=root_rule,
-            )
-            # TODO: Delete as per https://github.com/Flagsmith/flagsmith/issues/7818
-            _create_segment_rule_for_segment(
-                import_request=import_request,
-                segment=segment,
-                clauses=rule["clauses"],
-            )
-
         # Create or update identities that are mentioned in the segment.
         for identifier in ld_segment["included"] + ld_segment["excluded"]:
             identity, _ = Identity.objects.get_or_create(
@@ -1150,35 +1278,6 @@ def _create_segments_from_ld(
                 ]
             )
 
-        _add_users_to_segment_rule(
-            import_request=import_request,
-            segment_name=segment.name,
-            users=ld_segment["included"],
-            negate=False,
-            rule=root_rule,
-        )
-        _add_users_to_segment_rule(
-            import_request=import_request,
-            segment_name=segment.name,
-            users=ld_segment["excluded"],
-            negate=True,
-            rule=root_rule,
-        )
-
-        # TODO: Delete as per https://github.com/Flagsmith/flagsmith/issues/7818
-        _include_users_to_segment(
-            import_request=import_request,
-            segment=segment,
-            users=ld_segment["included"],
-            negate=False,
-        )
-        _include_users_to_segment(
-            import_request=import_request,
-            segment=segment,
-            users=ld_segment["excluded"],
-            negate=True,
-        )
-
         if (
             len(ld_segment["includedContexts"]) > 0
             or len(ld_segment["excludedContexts"]) > 0
@@ -1188,12 +1287,15 @@ def _create_segments_from_ld(
                 error_message=f"Contexts are not supported, skipping contexts for segment: {segment.name}",
             )
 
-        # Create an empty rule if there are no rules. This is required to create an "SegmentRule" object.
-        # Otherwise, UI fails to display the segment.
+        rules = _get_segment_rules(
+            import_request=import_request,
+            segment_name=segment.name,
+            ld_segment=ld_segment,
+        )
         # TODO: Delete as per https://github.com/Flagsmith/flagsmith/issues/7818
-        SegmentRule.objects.get_or_create(segment=segment, type=SegmentRule.ALL_RULE)
+        write_segment_rules(segment, rules)
 
-        segment.rules_data = [root_rule]
+        segment.rules_data = rules
         segment.save(update_fields=["rules_data"])
 
     return segments_by_ld_key

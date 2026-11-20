@@ -18,8 +18,10 @@ from environments.identities.models import Identity
 from environments.identities.traits.models import Trait
 from environments.models import Environment
 from features.models import Feature, FeatureState
+from integrations.launch_darkly import types as ld_types
 from integrations.launch_darkly.models import LaunchDarklyImportRequest
 from integrations.launch_darkly.services import (
+    _get_segment_rules,
     _serialize_variation_value,
     create_import_request,
     process_import_request,
@@ -27,6 +29,7 @@ from integrations.launch_darkly.services import (
 from projects.models import Project
 from projects.tags.models import Tag
 from segments.models import Condition, Segment, SegmentRule
+from segments.types import SegmentCondition
 
 # TODO: Delete alias as per https://github.com/Flagsmith/flagsmith/issues/7818
 from segments.types import SegmentRule as SegmentRuleType
@@ -364,33 +367,29 @@ def test_process_import_request__valid_segments__creates_segment_per_environment
             "Dynamic List 2 (Override for production)",
             [
                 {
-                    "type": SegmentRule.ALL_RULE,
+                    # Launch Darkly matches any of the segment's rules or included users.
+                    "type": SegmentRule.ANY_RULE,
                     "conditions": [],
                     "rules": [
                         {
-                            "type": SegmentRule.ANY_RULE,
+                            "type": SegmentRule.ALL_RULE,
                             "conditions": [
                                 {
                                     "property": "p1",
                                     "operator": segment_constants.IN,
                                     "value": "1,2",
                                     "description": None,
-                                }
-                            ],
-                        },
-                        {
-                            "type": SegmentRule.ANY_RULE,
-                            "conditions": [
+                                },
                                 {
                                     "property": "p2",
                                     "operator": segment_constants.GREATER_THAN,
                                     "value": "1.0.0:semver",
                                     "description": None,
-                                }
+                                },
                             ],
                         },
                         {
-                            "type": SegmentRule.ANY_RULE,
+                            "type": SegmentRule.ALL_RULE,
                             "conditions": [
                                 {
                                     "property": "p3",
@@ -401,7 +400,7 @@ def test_process_import_request__valid_segments__creates_segment_per_environment
                             ],
                         },
                         {
-                            "type": SegmentRule.ANY_RULE,  # included users
+                            "type": SegmentRule.ALL_RULE,  # included users
                             "conditions": [
                                 {
                                     "property": "key",
@@ -411,6 +410,12 @@ def test_process_import_request__valid_segments__creates_segment_per_environment
                                 }
                             ],
                         },
+                    ],
+                },
+                {
+                    "type": SegmentRule.ALL_RULE,
+                    "conditions": [],
+                    "rules": [
                         {
                             "type": SegmentRule.NONE_RULE,  # excluded users
                             "conditions": [
@@ -423,7 +428,7 @@ def test_process_import_request__valid_segments__creates_segment_per_environment
                             ],
                         },
                     ],
-                }
+                },
             ],
             id="targeting-rules-and-user-lists",
         ),
@@ -596,91 +601,50 @@ def test_process_import_request__valid_segments__imports_correctly_x_replaced_ab
     dynamic_list_2_production_segment = Segment.objects.get(
         name="Dynamic List 2 (Override for production)"
     )
-    dynamic_list_2_production_segment_rule = SegmentRule.objects.get(
-        segment=dynamic_list_2_production_segment
-    )
-    # Parents are always "ALL" rules.
-    assert dynamic_list_2_production_segment_rule.type == SegmentRule.ALL_RULE
-
-    dynamic_list_2_production_segment_subrules = SegmentRule.objects.filter(
-        rule=dynamic_list_2_production_segment_rule
-    )
-    assert dynamic_list_2_production_segment_subrules.count() == 5
-    # UI needs to have subrules as `ANY_RULE` to display properly.
-    assert (
-        list(dynamic_list_2_production_segment_subrules)[0].type == SegmentRule.ANY_RULE
-    )
-    assert (
-        list(dynamic_list_2_production_segment_subrules)[1].type == SegmentRule.ANY_RULE
-    )
-    assert (
-        list(dynamic_list_2_production_segment_subrules)[2].type == SegmentRule.ANY_RULE
-    )
-
-    dynamic_list_2_production_segment_subrule_0_conditions = Condition.objects.filter(
-        rule=dynamic_list_2_production_segment_subrules[0]
-    )
-
-    assert set(
-        dynamic_list_2_production_segment_subrule_0_conditions.values_list(
-            "property", "operator", "value"
+    dynamic_list_2_production_segment_rules = [
+        (
+            rule.type,
+            [
+                (
+                    subrule.type,
+                    set(
+                        subrule.conditions.values_list("property", "operator", "value")
+                    ),
+                )
+                for subrule in SegmentRule.objects.filter(rule=rule).order_by("id")
+            ],
         )
-    ) == {
-        ("p1", segment_constants.IN, "1,2"),
-    }
-
-    dynamic_list_2_production_segment_subrule_1_conditions = Condition.objects.filter(
-        rule=dynamic_list_2_production_segment_subrules[1]
-    )
-    assert set(
-        dynamic_list_2_production_segment_subrule_1_conditions.values_list(
-            "property", "operator", "value"
-        )
-    ) == {
-        ("p2", segment_constants.GREATER_THAN, "1.0.0:semver"),
-    }
-
-    dynamic_list_2_production_segment_subrule_2_conditions = Condition.objects.filter(
-        rule=dynamic_list_2_production_segment_subrules[2]
-    )
-    assert set(
-        dynamic_list_2_production_segment_subrule_2_conditions.values_list(
-            "property", "operator", "value"
-        )
-    ) == {
-        ("p3", segment_constants.REGEX, "foo[0-9]{0,1}"),
-    }
-
-    # Include individual users
-    assert (
-        list(dynamic_list_2_production_segment_subrules)[3].type == SegmentRule.ANY_RULE
-    )
-    dynamic_list_2_production_segment_subrule_3_conditions = Condition.objects.filter(
-        rule=dynamic_list_2_production_segment_subrules[3]
-    )
-    assert set(
-        dynamic_list_2_production_segment_subrule_3_conditions.values_list(
-            "property", "operator", "value"
-        )
-    ) == {
-        ("key", segment_constants.IN, "foo"),
-    }
-
-    # Exclude individual users
-    assert (
-        list(dynamic_list_2_production_segment_subrules)[4].type
-        == SegmentRule.NONE_RULE
-    )
-    dynamic_list_2_production_segment_subrule_4_conditions = Condition.objects.filter(
-        rule=dynamic_list_2_production_segment_subrules[4]
-    )
-    assert set(
-        dynamic_list_2_production_segment_subrule_4_conditions.values_list(
-            "property", "operator", "value"
-        )
-    ) == {
-        ("key", segment_constants.IN, "bar"),
-    }
+        for rule in SegmentRule.objects.filter(
+            segment=dynamic_list_2_production_segment
+        ).order_by("id")
+    ]
+    assert dynamic_list_2_production_segment_rules == [
+        (
+            SegmentRule.ANY_RULE,
+            [
+                (
+                    SegmentRule.ALL_RULE,
+                    {
+                        ("p1", segment_constants.IN, "1,2"),
+                        ("p2", segment_constants.GREATER_THAN, "1.0.0:semver"),
+                    },
+                ),
+                (
+                    SegmentRule.ALL_RULE,
+                    {("p3", segment_constants.REGEX, "foo[0-9]{0,1}")},
+                ),
+                # Include individual users
+                (SegmentRule.ALL_RULE, {("key", segment_constants.IN, "foo")}),
+            ],
+        ),
+        (
+            SegmentRule.ALL_RULE,
+            [
+                # Exclude individual users
+                (SegmentRule.NONE_RULE, {("key", segment_constants.IN, "bar")}),
+            ],
+        ),
+    ]
 
     # User list segments
     user_list_test_segment = Segment.objects.get(name="User List (Override for test)")
@@ -1255,3 +1219,295 @@ def test_process_import_request__import__enqueues_membership_refresh(
 
     # Then
     enqueue_membership_refresh_mock.assert_called_once_with(project)
+
+
+@pytest.mark.parametrize(
+    "identifier, traits, expected_in_segment",
+    [
+        pytest.param("foo", {}, True, id="included-user"),
+        pytest.param("id-1", {"p3": "foo1"}, True, id="matches-second-rule-only"),
+        pytest.param(
+            "id-2", {"p1": "1", "p2": "2.0.0"}, True, id="matches-first-rule-only"
+        ),
+        pytest.param(
+            "id-3", {"p1": "1", "p2": "2.0.0", "p3": "foo1"}, True, id="matches-both"
+        ),
+        pytest.param("id-4", {"p1": "1"}, False, id="matches-part-of-first-rule"),
+        pytest.param("bar", {"p3": "foo1"}, False, id="excluded-user"),
+        pytest.param("id-5", {}, False, id="matches-nothing"),
+    ],
+)
+@pytest.mark.django_db(transaction=True)
+def test_process_import_request__segment_with_several_rules__matches_like_launch_darkly(
+    project: Project,
+    import_request: LaunchDarklyImportRequest,
+    identifier: str,
+    traits: dict[str, str],
+    expected_in_segment: bool,
+) -> None:
+    # Given
+    # LaunchDarkly puts a context in a segment if it is in `included`, or else,
+    # if it is not in `excluded` and any one of the segment's rules matches.
+    process_import_request(import_request)
+    segment = Segment.objects.get(name="Dynamic List 2 (Override for test)")
+    environment = Environment.objects.get(project=project, name="Test")
+    identity, _ = Identity.objects.get_or_create(
+        identifier=identifier, environment=environment
+    )
+    identity.update_traits(
+        [
+            {"trait_key": key, "trait_value": value}  # type: ignore[typeddict-item]
+            for key, value in {"key": identifier, **traits}.items()
+        ]
+    )
+
+    # When
+    in_segment = segment in identity.get_segments()
+
+    # Then
+    assert in_segment is expected_in_segment
+
+
+def _ld_segment_with_rules(
+    rules: list[list[ld_types.Clause]],
+) -> ld_types.UserSegment:
+    return {
+        "name": "Segment",
+        "tags": [],
+        "creationDate": 0,
+        "lastModifiedDate": 0,
+        "key": "segment",
+        "included": ["foo"],
+        "excluded": [],
+        "_links": {},
+        "rules": [{"clauses": clauses} for clauses in rules],
+        "unbounded": False,
+        "version": 1,
+        "generation": 1,
+        "deleted": False,
+    }
+
+
+@pytest.mark.django_db
+def test_get_segment_rules__several_rules_with_negated_clauses__returns_all_groups(
+    import_request: LaunchDarklyImportRequest,
+) -> None:
+    # Given
+    ld_segment = _ld_segment_with_rules(
+        [
+            [
+                {
+                    "attribute": "plan",
+                    "op": "in",
+                    "values": ["free", "trial"],
+                    "negate": True,
+                },
+                {
+                    "attribute": "email",
+                    "op": "contains",
+                    "values": ["@a", "@b"],
+                    "negate": False,
+                },
+                {
+                    "attribute": "name",
+                    "op": "contains",
+                    "values": ["bot"],
+                    "negate": True,
+                },
+            ],
+            [
+                {
+                    "attribute": "country",
+                    "op": "segmentMatch",
+                    "values": ["x"],
+                    "negate": False,
+                },
+                {
+                    "attribute": "age",
+                    "op": "greaterThan",
+                    "values": [18],
+                    "negate": False,
+                },
+            ],
+        ]
+    )
+
+    # When
+    rules = _get_segment_rules(
+        import_request=import_request,
+        segment_name="Segment",
+        ld_segment=ld_segment,
+    )
+
+    # Then
+    negated_conditions: list[SegmentCondition] = [
+        {
+            "property": "plan",
+            "operator": segment_constants.NOT_EQUAL,
+            "value": "free",
+            "description": None,
+        },
+        {
+            "property": "plan",
+            "operator": segment_constants.NOT_EQUAL,
+            "value": "trial",
+            "description": None,
+        },
+    ]
+    not_bot_condition: SegmentCondition = {
+        "property": "name",
+        "operator": segment_constants.NOT_CONTAINS,
+        "value": "bot",
+        "description": None,
+    }
+    expected_rules: list[SegmentRuleType] = [
+        {
+            "type": segment_constants.ANY_RULE,
+            "conditions": [],
+            "rules": [
+                {
+                    "type": segment_constants.ALL_RULE,
+                    "conditions": [
+                        *negated_conditions,
+                        {
+                            "property": "email",
+                            "operator": segment_constants.CONTAINS,
+                            "value": "@a",
+                            "description": None,
+                        },
+                        not_bot_condition,
+                    ],
+                },
+                {
+                    "type": segment_constants.ALL_RULE,
+                    "conditions": [
+                        *negated_conditions,
+                        {
+                            "property": "email",
+                            "operator": segment_constants.CONTAINS,
+                            "value": "@b",
+                            "description": None,
+                        },
+                        not_bot_condition,
+                    ],
+                },
+                {
+                    "type": segment_constants.ALL_RULE,
+                    "conditions": [
+                        {
+                            "property": "age",
+                            "operator": segment_constants.GREATER_THAN,
+                            "value": "18",
+                            "description": None,
+                        },
+                    ],
+                },
+                {
+                    "type": segment_constants.ALL_RULE,
+                    "conditions": [
+                        {
+                            "property": "key",
+                            "operator": segment_constants.IN,
+                            "value": "foo",
+                            "description": None,
+                        },
+                    ],
+                },
+            ],
+        }
+    ]
+    assert rules == expected_rules
+    assert import_request.status["error_messages"] == [
+        "Can't map launch darkly operator: segmentMatch skipping for segment: Segment",
+    ]
+
+
+@pytest.mark.django_db
+def test_get_segment_rules__rule_with_unsupported_negation__skips_rule_and_logs_error(
+    import_request: LaunchDarklyImportRequest,
+) -> None:
+    # Given
+    ld_segment = _ld_segment_with_rules(
+        [
+            [{"attribute": "email", "op": "matches", "values": [".*"], "negate": True}],
+            [
+                {
+                    "attribute": "age",
+                    "op": "greaterThan",
+                    "values": [18],
+                    "negate": False,
+                }
+            ],
+        ]
+    )
+
+    # When
+    rules = _get_segment_rules(
+        import_request=import_request,
+        segment_name="Segment",
+        ld_segment=ld_segment,
+    )
+
+    # Then
+    assert [subrule["conditions"][0]["property"] for subrule in rules[0]["rules"]] == [
+        "age",
+        "key",
+    ]
+    assert import_request.status["error_messages"] == [
+        "Can't negate launch darkly operator: matches skipping rule for segment: Segment",
+    ]
+
+
+@pytest.mark.django_db
+def test_get_segment_rules__rule_expanding_to_too_many_groups__skips_rule_and_logs_error(
+    import_request: LaunchDarklyImportRequest,
+    mocker: MockerFixture,
+) -> None:
+    # Given
+    mocker.patch(
+        "integrations.launch_darkly.services.LAUNCH_DARKLY_SEGMENT_RULE_MAX_CONDITION_GROUPS",
+        3,
+    )
+    ld_segment = _ld_segment_with_rules(
+        [
+            [
+                {
+                    "attribute": "a",
+                    "op": "contains",
+                    "values": ["1", "2"],
+                    "negate": False,
+                },
+                {
+                    "attribute": "b",
+                    "op": "contains",
+                    "values": ["1", "2"],
+                    "negate": False,
+                },
+            ],
+            [
+                {
+                    "attribute": "age",
+                    "op": "greaterThan",
+                    "values": [18],
+                    "negate": False,
+                }
+            ],
+        ]
+    )
+
+    # When
+    rules = _get_segment_rules(
+        import_request=import_request,
+        segment_name="Segment",
+        ld_segment=ld_segment,
+    )
+
+    # Then
+    assert [subrule["conditions"][0]["property"] for subrule in rules[0]["rules"]] == [
+        "age",
+        "key",
+    ]
+    assert import_request.status["error_messages"] == [
+        "Segment rule is too complex to import (4 condition groups),"
+        " skipping rule for segment: Segment",
+    ]

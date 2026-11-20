@@ -12,3 +12,7 @@ LAUNCH_DARKLY_IMPORTED_DEFAULT_TAG_LABEL = "Imported"
 
 BACKOFF_MAX_RETRIES = 5
 BACKOFF_DEFAULT_RETRY_AFTER_SECONDS = 10
+
+# Maximum number of condition groups a Launch Darkly segment rule may expand into
+# when a clause matches any of several values.
+LAUNCH_DARKLY_SEGMENT_RULE_MAX_CONDITION_GROUPS = 100

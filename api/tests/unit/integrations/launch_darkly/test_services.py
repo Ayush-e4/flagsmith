@@ -1255,3 +1255,43 @@ def test_process_import_request__import__enqueues_membership_refresh(
 
     # Then
     enqueue_membership_refresh_mock.assert_called_once_with(project)
+
+
+@pytest.mark.parametrize(
+    "segment_name, expected_value",
+    [
+        ("Reverted And", "1"),  # LD variation 0
+        ("Regular And", "2"),  # LD variation 1
+        ("Just Not", "3"),  # LD variation 2
+    ],
+)
+@pytest.mark.django_db(transaction=True)
+def test_process_import_request__multivariate_rule_with_variation__serves_that_variation(
+    project: Project,
+    import_request: LaunchDarklyImportRequest,
+    segment_name: str,
+    expected_value: str,
+) -> None:
+    # Given
+    # TEST_TARGETED_CONTEXT is a multivariate flag whose rules each serve
+    # a single variation in the "test" environment.
+
+    # When
+    process_import_request(import_request)
+
+    # Then
+    feature_state = FeatureState.objects.get(
+        feature__project=project,
+        feature__name="TEST_TARGETED_CONTEXT",
+        environment__name="Test",
+        feature_segment__segment__name=segment_name,
+    )
+    assert set(
+        feature_state.multivariate_feature_state_values.values_list(
+            "multivariate_feature_option__string_value",
+            "percentage_allocation",
+        )
+    ) == {
+        (value, 100 if value == expected_value else 0)
+        for value in ("1", "2", "3", "-1")
+    }

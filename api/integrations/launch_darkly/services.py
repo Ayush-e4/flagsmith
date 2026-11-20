@@ -745,8 +745,9 @@ def _import_rules(
                 rule_name=rule_name,
             )
 
+            variation = rule.get("variation")
             _set_imported_mv_feature_state_values(
-                variation_idx=rule.get("variation", None),  # type: ignore[arg-type]
+                variation_idx=None if variation is None else str(variation),
                 rollout=rule.get("rollout", None),
                 feature_states=feature_states,
                 mv_feature_options_by_variation=mv_feature_options_by_variation,

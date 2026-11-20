@@ -1,0 +1,12 @@
+
+=== OLD  (main API :8001 + main UI) ===
+- alice_flag_155602        | author=yes  | master_api_key="<field absent>" | UI shows: Alice Admin
+- alice_flag_155602        | author=yes  | master_api_key="<field absent>" | UI shows: Alice Admin
+- terraform_flag_155602    | author=null | master_api_key="<field absent>" | UI shows: (blank)
+- terraform_flag_155602    | author=null | master_api_key="<field absent>" | UI shows: (blank)
+
+=== FIXED (#8261 API :8000 + #8261 UI) ===
+- alice_flag_155602        | author=yes  | master_api_key=null | UI shows: Alice Admin
+- alice_flag_155602        | author=yes  | master_api_key=null | UI shows: Alice Admin
+- terraform_flag_155602    | author=null | master_api_key={"prefix": "DF9FJs9L", "name": "terraform-prod"} | UI shows: terraform-prod (API key)
+- terraform_flag_155602    | author=null | master_api_key={"prefix": "DF9FJs9L", "name": "terraform-prod"} | UI shows: terraform-prod (API key)

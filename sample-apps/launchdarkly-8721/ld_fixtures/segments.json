@@ -1,0 +1,54 @@
+[
+  {
+    "name": "Beta testers",
+    "key": "beta-testers",
+    "tags": [],
+    "creationDate": 1704302060324,
+    "lastModifiedDate": 1704302081521,
+    "included": [
+      "vip-user"
+    ],
+    "excluded": [
+      "blocked-user"
+    ],
+    "includedContexts": [],
+    "excludedContexts": [],
+    "rules": [
+      {
+        "_id": "r1",
+        "clauses": [
+          {
+            "_id": "c-email",
+            "attribute": "email",
+            "contextKind": "user",
+            "negate": false,
+            "op": "endsWith",
+            "values": [
+              "@acme.com"
+            ]
+          }
+        ]
+      },
+      {
+        "_id": "r2",
+        "clauses": [
+          {
+            "_id": "c-country",
+            "attribute": "country",
+            "contextKind": "user",
+            "negate": false,
+            "op": "in",
+            "values": [
+              "NL",
+              "BE"
+            ]
+          }
+        ]
+      }
+    ],
+    "version": 1,
+    "deleted": false,
+    "generation": 1,
+    "_links": {}
+  }
+]

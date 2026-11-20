@@ -1,0 +1,10 @@
+user          email            ctry | LaunchDarkly | old import | fixed import
+--------------------------------------------------------------------------------
+alice         alice@acme.com   US   | ON           | off ❌      | ON  ✅       
+bob           bob@gmail.com    NL   | ON           | off ❌      | ON  ✅       
+carol         carol@acme.com   BE   | ON           | off ❌      | ON  ✅       
+dave          dave@gmail.com   US   | off          | off ✅      | off ✅       
+vip-user      vip@gmail.com    US   | ON           | off ❌      | ON  ✅       
+blocked-user  x@acme.com       NL   | off          | off ✅      | off ✅       
+--------------------------------------------------------------------------------
+matches LaunchDarkly: old 2/6, fixed 6/6

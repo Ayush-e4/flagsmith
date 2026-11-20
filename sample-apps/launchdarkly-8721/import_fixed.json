@@ -1,0 +1,73 @@
+{
+  "label": "fixed",
+  "project_id": 9,
+  "import_status": {
+    "result": "success",
+    "error_messages": [],
+    "requested_flag_count": 1,
+    "deprecated_flag_count": 0,
+    "requested_environment_count": 2
+  },
+  "segment_rules_data": [
+    {
+      "type": "ANY",
+      "rules": [
+        {
+          "type": "ALL",
+          "conditions": [
+            {
+              "value": ".*@acme\\.com$",
+              "operator": "REGEX",
+              "property": "email",
+              "description": null
+            }
+          ]
+        },
+        {
+          "type": "ALL",
+          "conditions": [
+            {
+              "value": "NL,BE",
+              "operator": "IN",
+              "property": "country",
+              "description": null
+            }
+          ]
+        },
+        {
+          "type": "ALL",
+          "conditions": [
+            {
+              "value": "vip-user",
+              "operator": "IN",
+              "property": "key",
+              "description": null
+            }
+          ]
+        }
+      ],
+      "conditions": []
+    },
+    {
+      "type": "ALL",
+      "rules": [
+        {
+          "type": "NONE",
+          "conditions": [
+            {
+              "value": "blocked-user",
+              "operator": "IN",
+              "property": "key",
+              "description": null
+            }
+          ]
+        }
+      ],
+      "conditions": []
+    }
+  ],
+  "environments": {
+    "Test": "AuHMRWrVEMVZWGZCNaLfzt",
+    "Production": "aDXP2wBoykuzBvqEbYthkc"
+  }
+}

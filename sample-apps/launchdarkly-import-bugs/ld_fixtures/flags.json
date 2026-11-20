@@ -1,0 +1,149 @@
+[
+  {
+    "key": "checkout-version",
+    "name": "checkout-version",
+    "kind": "multivariate",
+    "description": "Which checkout a user gets",
+    "archived": false,
+    "deprecated": false,
+    "temporary": false,
+    "tags": [],
+    "creationDate": 1704302028410,
+    "defaults": {
+      "offVariation": 2,
+      "onVariation": 0
+    },
+    "variations": [
+      {
+        "_id": "v0",
+        "name": "New",
+        "value": "new"
+      },
+      {
+        "_id": "v1",
+        "name": "Old",
+        "value": "old"
+      },
+      {
+        "_id": "v2",
+        "name": "Legacy",
+        "value": "legacy"
+      }
+    ],
+    "environments": {
+      "test": {
+        "_environmentName": "x",
+        "_summary": {
+          "variations": {
+            "0": {
+              "rules": 1
+            },
+            "1": {
+              "isFallthrough": true
+            },
+            "2": {
+              "isOff": true
+            }
+          }
+        },
+        "archived": false,
+        "contextTargets": [],
+        "targets": [],
+        "fallthrough": {
+          "variation": 1
+        },
+        "offVariation": 2,
+        "on": true,
+        "prerequisites": [],
+        "rules": [
+          {
+            "_id": "beta-rule",
+            "description": "Beta testers get new",
+            "clauses": [
+              {
+                "_id": "c1",
+                "attribute": "segmentMatch",
+                "contextKind": "user",
+                "negate": false,
+                "op": "segmentMatch",
+                "values": [
+                  "beta-testers"
+                ]
+              }
+            ],
+            "trackEvents": false,
+            "variation": 0
+          }
+        ],
+        "salt": "s",
+        "sel": "s",
+        "trackEvents": false,
+        "trackEventsFallthrough": false,
+        "version": 1,
+        "lastModified": 1704731410003
+      },
+      "production": {
+        "_environmentName": "x",
+        "_summary": {
+          "variations": {
+            "0": {
+              "rules": 1
+            },
+            "1": {
+              "isFallthrough": true
+            },
+            "2": {
+              "isOff": true
+            }
+          }
+        },
+        "archived": false,
+        "contextTargets": [],
+        "targets": [],
+        "fallthrough": {
+          "variation": 1
+        },
+        "offVariation": 2,
+        "on": true,
+        "prerequisites": [],
+        "rules": [
+          {
+            "_id": "beta-rule",
+            "description": "Beta testers get new",
+            "clauses": [
+              {
+                "_id": "c1",
+                "attribute": "segmentMatch",
+                "contextKind": "user",
+                "negate": false,
+                "op": "segmentMatch",
+                "values": [
+                  "beta-testers"
+                ]
+              }
+            ],
+            "trackEvents": false,
+            "variation": 0
+          }
+        ],
+        "salt": "s",
+        "sel": "s",
+        "trackEvents": false,
+        "trackEventsFallthrough": false,
+        "version": 1,
+        "lastModified": 1704731410003
+      }
+    },
+    "_links": {},
+    "_version": 1,
+    "customProperties": {},
+    "goalIds": [],
+    "experiments": {
+      "baselineIdx": 0,
+      "items": []
+    },
+    "clientSideAvailability": {},
+    "includeInSnippet": false,
+    "maintainerId": "x"
+  }
+]

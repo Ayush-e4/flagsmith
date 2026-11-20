@@ -1,0 +1,17 @@
+env         user         | LaunchDarkly | old import     | fixed import  
+------------------------------------------------------------------------
+Test        tess-tester  | new          | old    ❌      | new    ✅     
+Test        paula-prod   | old          | None   ❌      | old    ✅     
+Test        dave         | old          | old    ✅      | old    ✅     
+Production  tess-tester  | old          | old    ✅      | old    ✅     
+Production  paula-prod   | new          | None   ❌      | new    ✅     
+Production  dave         | old          | old    ✅      | old    ✅     
+------------------------------------------------------------------------
+matches Launch Darkly: old 3/6, fixed 6/6
+
+old import, segment overrides created:
+  Production  -> Beta testers (Override for production)   {'new': 0.0, 'old': 0.0, 'legacy': 0.0}
+  Test        -> Beta testers (Override for production)   {'new': 0.0, 'old': 0.0, 'legacy': 0.0}
+fixed import, segment overrides created:
+  Production  -> Beta testers (Override for production)   {'new': 100.0, 'old': 0.0, 'legacy': 0.0}
+  Test        -> Beta testers (Override for test)         {'new': 100.0, 'old': 0.0, 'legacy': 0.0}

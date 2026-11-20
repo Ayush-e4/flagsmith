@@ -1,0 +1,28 @@
+{
+  "label": "old",
+  "import_result": "success",
+  "segment_overrides": [
+    {
+      "environment": "Production",
+      "linked_segment": "Beta testers (Override for production)",
+      "percentages": {
+        "new": 0.0,
+        "old": 0.0,
+        "legacy": 0.0
+      }
+    },
+    {
+      "environment": "Test",
+      "linked_segment": "Beta testers (Override for production)",
+      "percentages": {
+        "new": 0.0,
+        "old": 0.0,
+        "legacy": 0.0
+      }
+    }
+  ],
+  "environment_keys": {
+    "Test": "cUFRS74DUQAdZy8iuiJu7n",
+    "Production": "3nNHTGjGXqi28zbu6DS4zR"
+  }
+}

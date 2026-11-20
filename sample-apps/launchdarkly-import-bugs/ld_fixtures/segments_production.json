@@ -1,0 +1,20 @@
+[
+  {
+    "name": "Beta testers",
+    "key": "beta-testers",
+    "tags": [],
+    "creationDate": 1704302060324,
+    "lastModifiedDate": 1704302081521,
+    "included": [
+      "paula-prod"
+    ],
+    "excluded": [],
+    "includedContexts": [],
+    "excludedContexts": [],
+    "rules": [],
+    "version": 1,
+    "deleted": false,
+    "generation": 1,
+    "_links": {}
+  }
+]

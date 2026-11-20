@@ -17,7 +17,7 @@ from requests.exceptions import HTTPError, RequestException, Timeout
 from environments.identities.models import Identity
 from environments.identities.traits.models import Trait
 from environments.models import Environment
-from features.models import Feature, FeatureState
+from features.models import Feature, FeatureSegment, FeatureState
 from integrations.launch_darkly.models import LaunchDarklyImportRequest
 from integrations.launch_darkly.services import (
     _serialize_variation_value,
@@ -1255,6 +1255,33 @@ def test_process_import_request__import__enqueues_membership_refresh(
 
     # Then
     enqueue_membership_refresh_mock.assert_called_once_with(project)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_process_import_request__segment_match_rules__targets_segment_of_same_environment(
+    project: Project,
+    import_request: LaunchDarklyImportRequest,
+) -> None:
+    # Given
+    # TEST_SEGMENT_TARGET matches LD segments in both the "test" and the
+    # "production" environment. Each environment gets its own Flagsmith segment.
+
+    # When
+    process_import_request(import_request)
+
+    # Then
+    feature_segments = FeatureSegment.objects.filter(
+        feature__project=project,
+        feature__name="TEST_SEGMENT_TARGET",
+    )
+    assert set(feature_segments.values_list("environment__name", "segment__name")) == {
+        ("Test", "User List (Override for test)"),
+        ("Test", "Dynamic List (Override for test)"),
+        ("Test", "Dynamic List 2 (Override for test)"),
+        ("Production", "User List (Override for production)"),
+        ("Production", "Dynamic List (Override for production)"),
+        ("Production", "Dynamic List 2 (Override for production)"),
+    }
 
 
 @pytest.mark.parametrize(

@@ -759,7 +759,7 @@ def _create_boolean_feature_states_with_segments_identities(
     ld_flag: ld_types.FeatureFlag,
     feature: Feature,
     environments_by_ld_environment_key: dict[str, Environment],
-    segments_by_ld_key: dict[str, Segment],
+    segments_by_ld_environment_key: dict[str, dict[str, Segment]],
 ) -> None:
     for ld_environment_key, environment in environments_by_ld_environment_key.items():
         ld_flag_config = ld_flag["environments"][ld_environment_key]
@@ -781,7 +781,9 @@ def _create_boolean_feature_states_with_segments_identities(
             ld_flag_config=ld_flag_config,
             feature=feature,
             environment=environment,
-            segments_by_ld_key=segments_by_ld_key,
+            segments_by_ld_key=segments_by_ld_environment_key.get(
+                ld_environment_key, {}
+            ),
             mv_feature_options_by_variation={},
         )
         _import_rules(
@@ -789,7 +791,9 @@ def _create_boolean_feature_states_with_segments_identities(
             ld_flag_config=ld_flag_config,
             feature=feature,
             environment=environment,
-            segments_by_ld_key=segments_by_ld_key,
+            segments_by_ld_key=segments_by_ld_environment_key.get(
+                ld_environment_key, {}
+            ),
             mv_feature_options_by_variation={},
         )
 
@@ -799,7 +803,7 @@ def _create_string_feature_states_with_segments_identities(
     ld_flag: ld_types.FeatureFlag,
     feature: Feature,
     environments_by_ld_environment_key: dict[str, Environment],
-    segments_by_ld_key: dict[str, Segment],
+    segments_by_ld_environment_key: dict[str, dict[str, Segment]],
 ) -> None:
     variations_by_idx = {
         str(idx): variation for idx, variation in enumerate(ld_flag["variations"])
@@ -844,7 +848,9 @@ def _create_string_feature_states_with_segments_identities(
             ld_flag_config=ld_flag_config,
             feature=feature,
             environment=environment,
-            segments_by_ld_key=segments_by_ld_key,
+            segments_by_ld_key=segments_by_ld_environment_key.get(
+                ld_environment_key, {}
+            ),
             mv_feature_options_by_variation={},
         )
         _import_rules(
@@ -852,7 +858,9 @@ def _create_string_feature_states_with_segments_identities(
             ld_flag_config=ld_flag_config,
             feature=feature,
             environment=environment,
-            segments_by_ld_key=segments_by_ld_key,
+            segments_by_ld_key=segments_by_ld_environment_key.get(
+                ld_environment_key, {}
+            ),
             mv_feature_options_by_variation={},
         )
 
@@ -862,7 +870,7 @@ def _create_mv_feature_states_with_segments_identities(
     ld_flag: ld_types.FeatureFlag,
     feature: Feature,
     environments_by_ld_environment_key: dict[str, Environment],
-    segments_by_ld_key: dict[str, Segment],
+    segments_by_ld_environment_key: dict[str, dict[str, Segment]],
 ) -> None:
     variations = ld_flag["variations"]
     variation_values_by_idx: dict[str, str] = {}
@@ -941,7 +949,9 @@ def _create_mv_feature_states_with_segments_identities(
             ld_flag_config=ld_flag_config,
             feature=feature,
             environment=environment,
-            segments_by_ld_key=segments_by_ld_key,
+            segments_by_ld_key=segments_by_ld_environment_key.get(
+                ld_environment_key, {}
+            ),
             mv_feature_options_by_variation=mv_feature_options_by_variation,
         )
         _import_rules(
@@ -949,7 +959,9 @@ def _create_mv_feature_states_with_segments_identities(
             ld_flag_config=ld_flag_config,
             feature=feature,
             environment=environment,
-            segments_by_ld_key=segments_by_ld_key,
+            segments_by_ld_key=segments_by_ld_environment_key.get(
+                ld_environment_key, {}
+            ),
             mv_feature_options_by_variation=mv_feature_options_by_variation,
         )
 
@@ -964,7 +976,7 @@ def _get_feature_type_and_feature_state_factory(
             ld_types.FeatureFlag,
             Feature,
             dict[str, Environment],
-            dict[str, Segment],
+            dict[str, dict[str, Segment]],
         ],
         None,
     ],
@@ -992,7 +1004,7 @@ def _create_feature_from_ld(
     ld_flag: ld_types.FeatureFlag,
     environments_by_ld_environment_key: dict[str, Environment],
     tags_by_ld_tag: dict[str, Tag],
-    segments_by_ld_key: dict[str, Segment],
+    segments_by_ld_environment_key: dict[str, dict[str, dict[str, Segment]]],
     project_id: int,
 ) -> Feature:
     (
@@ -1024,7 +1036,7 @@ def _create_feature_from_ld(
         ld_flag=ld_flag,
         feature=feature,
         environments_by_ld_environment_key=environments_by_ld_environment_key,
-        segments_by_ld_key=segments_by_ld_key,
+        segments_by_ld_environment_key=segments_by_ld_environment_key,
     )
 
     return feature  # type: ignore[no-any-return]
@@ -1035,7 +1047,7 @@ def _create_features_from_ld(
     ld_flags: Iterable[ld_types.FeatureFlag],
     environments_by_ld_environment_key: dict[str, Environment],
     tags_by_ld_tag: dict[str, Tag],
-    segments_by_ld_key: dict[str, Segment],
+    segments_by_ld_environment_key: dict[str, dict[str, dict[str, Segment]]],
     project_id: int,
 ) -> list[Feature]:
     return [
@@ -1044,7 +1056,7 @@ def _create_features_from_ld(
             ld_flag=ld_flag,
             environments_by_ld_environment_key=environments_by_ld_environment_key,
             tags_by_ld_tag=tags_by_ld_tag,
-            segments_by_ld_key=segments_by_ld_key,
+            segments_by_ld_environment_key=segments_by_ld_environment_key,
             project_id=project_id,
         )
         for ld_flag in ld_flags
@@ -1092,14 +1104,15 @@ def _create_segments_from_ld(
     environments_by_ld_environment_key: dict[str, Environment],
     tags_by_ld_tag: dict[str, Tag],
     project_id: int,
-) -> dict[str, Segment]:
+) -> dict[str, dict[str, dict[str, Segment]]]:
     """
     Create segments from the given Launch Darkly segments. This also creates inclusion rules for segments.
 
     :param ld_segments: A list of mapping from (env, segment).
-    :return A mapping from ld segment key to Segment itself.
+    :return: A mapping from Launch Darkly environment key to a mapping from Launch Darkly
+    segment key to the segment created for that environment.
     """
-    segments_by_ld_key = {}
+    segments_by_ld_environment_key: dict[str, dict[str, dict[str, Segment]]] = {}
     for ld_segment, env in ld_segments:
         if ld_segment["deleted"]:
             continue
@@ -1110,7 +1123,7 @@ def _create_segments_from_ld(
             project_id=project_id,
         )
 
-        segments_by_ld_key[ld_segment["key"]] = segment
+        segments_by_ld_environment_key.setdefault(env, {})[ld_segment["key"]] = segment
 
         # TODO: Tagging segments is not supported yet. https://github.com/Flagsmith/flagsmith/issues/3241
 
@@ -1197,7 +1210,7 @@ def _create_segments_from_ld(
         segment.rules_data = [root_rule]
         segment.save(update_fields=["rules_data"])
 
-    return segments_by_ld_key
+    return segments_by_ld_environment_key
 
 
 def create_import_request(
@@ -1285,7 +1298,7 @@ def process_import_request(
             # Create segments using `ld_segment_tags`
             # TODO populate with LD tags when https://github.com/Flagsmith/flagsmith/issues/3241 is done
             segment_tags_by_ld_tag: dict[str, Tag] = {}
-            segments_by_ld_key = _create_segments_from_ld(
+            segments_by_ld_environment_key = _create_segments_from_ld(
                 import_request=import_request,
                 ld_segments=ld_segments,
                 environments_by_ld_environment_key=environments_by_ld_environment_key,
@@ -1303,7 +1316,7 @@ def process_import_request(
                 ld_flags=ld_flags,
                 environments_by_ld_environment_key=environments_by_ld_environment_key,
                 tags_by_ld_tag=flag_tags_by_ld_tag,
-                segments_by_ld_key=segments_by_ld_key,
+                segments_by_ld_environment_key=segments_by_ld_environment_key,
                 project_id=import_request.project_id,
             )
 

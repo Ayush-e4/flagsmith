@@ -17,6 +17,7 @@ const log = (id: number, created_date: string): AuditLogItem => ({
   id,
   is_system_event: false,
   log: `Log ${id}`,
+  master_api_key: null,
   organisation: null,
   project: null,
   related_object_id: null,

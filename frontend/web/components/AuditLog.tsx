@@ -16,6 +16,7 @@ import { useGetSubscriptionMetadataQuery } from 'common/services/useSubscription
 import AccountStore from 'common/stores/account-store'
 import { isVersionOverLimit } from 'common/services/useFeatureVersion'
 import Tooltip from './Tooltip'
+import { getAuditLogAuthor } from './audit-log/getAuditLogAuthor'
 
 type AuditLogType = {
   environmentId: string
@@ -89,15 +90,16 @@ const AuditLog: FC<AuditLogType> = (props) => {
     hasHadResults.current = true
   }
 
-  const renderRow = ({
-    author,
-    created_date,
-    environment,
-    id,
-    log,
-    related_object_type,
-    related_object_uuid,
-  }: AuditLogItem) => {
+  const renderRow = (item: AuditLogItem) => {
+    const {
+      author,
+      created_date,
+      environment,
+      id,
+      log,
+      related_object_type,
+      related_object_uuid,
+    } = item
     const colour = getEnvironmentColourById(
       projectEnvironments?.results ?? [],
       environment?.id,
@@ -160,10 +162,10 @@ const AuditLog: FC<AuditLogType> = (props) => {
           className='table-column fs-small ln-sm'
           style={{ width: widths[1] }}
         >
-          <div>
-            {author?.first_name} {author?.last_name}
-          </div>
-          <div className='list-item-subtitle'>{author?.email}</div>
+          <div>{getAuditLogAuthor(item)}</div>
+          {!!author?.email && (
+            <div className='list-item-subtitle'>{author.email}</div>
+          )}
         </div>
         {environment?.name ? (
           <Link

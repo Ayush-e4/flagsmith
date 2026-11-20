@@ -61,7 +61,7 @@ class _BaseAuditLogViewSet(
             q = q & Q(log__icontains=search)
 
         queryset = AuditLog.objects.filter(q).select_related(
-            "organisation", "project", "environment", "author"
+            "organisation", "project", "environment", "author", "master_api_key"
         )
 
         return self._apply_visibility_limits(queryset)

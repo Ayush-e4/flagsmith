@@ -590,6 +590,8 @@ export type AuditLogItem = {
         last_login: string | null
       })
     | null
+  // The Master API key the change was made with, if any.
+  master_api_key: { prefix: string; name: string } | null
   organisation: { id: number; name: string } | null
   environment: AuditLogEnvironment | null
   // ProjectListSerializer.

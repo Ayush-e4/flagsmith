@@ -61,6 +61,7 @@ const detail = (
   id: 101,
   is_system_event: false,
   log: 'Log',
+  master_api_key: null,
   organisation: null,
   project,
   related_object_id: 12,

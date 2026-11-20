@@ -11,6 +11,7 @@ from pytest_mock import MockerFixture
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from api_keys.models import MasterAPIKey
 from audit.constants import ENVIRONMENT_FEATURE_VERSION_PUBLISHED_MESSAGE
 from audit.models import AuditLog
 from audit.related_object_type import RelatedObjectType
@@ -323,3 +324,68 @@ def test_list_audit_log_for_organisation__multiple_projects__fetches_migration_s
     # Then
     assert response.status_code == status.HTTP_200_OK
     assert len(dynamodb_calls) == 2
+
+
+def test_list_audit_log__change_made_with_master_api_key__returns_master_api_key(
+    admin_client: APIClient,
+    project: Project,
+    master_api_key_object: MasterAPIKey,
+) -> None:
+    # Given
+    AuditLog.objects.create(project=project, master_api_key=master_api_key_object)
+    url = reverse("api-v1:audit-list")
+
+    # When
+    response = admin_client.get(url, {"project": project.id})
+
+    # Then
+    assert response.status_code == status.HTTP_200_OK
+    [result] = response.json()["results"]
+    assert result["author"] is None
+    assert result["master_api_key"] == {
+        "prefix": master_api_key_object.prefix,
+        "name": master_api_key_object.name,
+    }
+
+
+def test_list_audit_log__change_made_by_user__returns_null_master_api_key(
+    admin_client: APIClient,
+    admin_user: FFAdminUser,
+    project: Project,
+) -> None:
+    # Given
+    AuditLog.objects.create(project=project, author=admin_user)
+    url = reverse("api-v1:audit-list")
+
+    # When
+    response = admin_client.get(url, {"project": project.id})
+
+    # Then
+    assert response.status_code == status.HTTP_200_OK
+    [result] = response.json()["results"]
+    assert result["author"]["id"] == admin_user.id
+    assert result["master_api_key"] is None
+
+
+def test_retrieve_audit_log__change_made_with_master_api_key__returns_master_api_key(
+    admin_client: APIClient,
+    project: Project,
+    master_api_key_object: MasterAPIKey,
+) -> None:
+    # Given
+    audit_log = AuditLog.objects.create(
+        project=project, master_api_key=master_api_key_object
+    )
+    url = reverse("api-v1:audit-detail", args=[audit_log.id])
+
+    # When
+    response = admin_client.get(url)
+
+    # Then
+    assert response.status_code == status.HTTP_200_OK
+    response_json = response.json()
+    assert response_json["author"] is None
+    assert response_json["master_api_key"] == {
+        "prefix": master_api_key_object.prefix,
+        "name": master_api_key_object.name,
+    }

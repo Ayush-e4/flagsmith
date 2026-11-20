@@ -1,15 +1,13 @@
 import { FC } from 'react'
 import moment from 'moment'
 import { AuditLogItem } from 'common/types/responses'
-import getUserDisplayName from 'common/utils/getUserDisplayName'
+import { getAuditLogAuthor } from 'components/audit-log/getAuditLogAuthor'
 import Chip from 'components/base/Chip'
 import { getAuditLogTypeLabel } from 'components/audit-log/auditLogType'
 import './AuditLogRow.scss'
 
 const AuditLogMessage: FC<{ item: AuditLogItem }> = ({ item }) => {
-  const author = item.is_system_event
-    ? 'System'
-    : getUserDisplayName(item.author ?? undefined)
+  const author = getAuditLogAuthor(item)
   return (
     <span className='audit-log-row__message gap-1'>
       <span className='text-default fw-semibold'>{item.log}</span>

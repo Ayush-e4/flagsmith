@@ -1,6 +1,7 @@
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
+from api_keys.models import MasterAPIKey
 from audit.models import AuditLog
 from audit.types import AuditLogChangeDetail, AuditLogsQueryParams, ChangeType
 from environments.serializers import EnvironmentSerializerLight
@@ -9,8 +10,20 @@ from projects.serializers import ProjectListSerializer
 from users.serializers import UserListSerializer
 
 
+class AuditLogMasterAPIKeySerializer(serializers.ModelSerializer):  # type: ignore[type-arg]
+    """
+    The Master API key a change was made with. Only the key's public
+    prefix and name are exposed, never its hashed identifier.
+    """
+
+    class Meta:
+        model = MasterAPIKey
+        fields = ("prefix", "name")
+
+
 class AuditLogListSerializer(serializers.ModelSerializer):  # type: ignore[type-arg]
     author = UserListSerializer()
+    master_api_key = AuditLogMasterAPIKeySerializer(allow_null=True)
     organisation = OrganisationSerializerBasic(allow_null=True)
     environment = EnvironmentSerializerLight(allow_null=True)
     project = ProjectListSerializer(allow_null=True)
@@ -22,6 +35,7 @@ class AuditLogListSerializer(serializers.ModelSerializer):  # type: ignore[type-
             "created_date",
             "log",
             "author",
+            "master_api_key",
             "organisation",
             "environment",
             "project",
@@ -40,6 +54,7 @@ class AuditLogChangeDetailsSerializer(serializers.Serializer[AuditLogChangeDetai
 
 class AuditLogRetrieveSerializer(serializers.ModelSerializer):  # type: ignore[type-arg]
     author = UserListSerializer()
+    master_api_key = AuditLogMasterAPIKeySerializer(allow_null=True)
     organisation = OrganisationSerializerBasic(allow_null=True)
     environment = EnvironmentSerializerLight(allow_null=True)
     project = ProjectListSerializer(allow_null=True)
@@ -53,6 +68,7 @@ class AuditLogRetrieveSerializer(serializers.ModelSerializer):  # type: ignore[t
             "created_date",
             "log",
             "author",
+            "master_api_key",
             "organisation",
             "environment",
             "project",

@@ -15,7 +15,7 @@ import Format from 'common/utils/format'
 import { Link, useRouteMatch } from 'react-router-dom'
 import Button from 'components/base/forms/Button'
 import { useRouteContext } from 'components/providers/RouteContext'
-import getUserDisplayName from 'common/utils/getUserDisplayName'
+import { getAuditLogAuthor } from 'components/audit-log/getAuditLogAuthor'
 
 interface RouteParams {
   environmentId: string
@@ -66,9 +66,9 @@ const AuditLogItemPage: FC = () => {
         }
       >
         {!!data &&
-          `Created ${moment(data.created_date).format('Do MMM YYYY HH:mma')}${
-            data.author ? ` by ${getUserDisplayName(data.author)}` : ''
-          }`}
+          `Created ${moment(data.created_date).format(
+            'Do MMM YYYY HH:mma',
+          )} by ${getAuditLogAuthor(data)}`}
       </PageTitle>
       {isLoading ? (
         <div className='text-center'>

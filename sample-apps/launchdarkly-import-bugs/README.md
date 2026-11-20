@@ -2,10 +2,10 @@
 
 Fix branch: [`fix/ld-importer-env-segments-and-mv-rules`](https://github.com/Ayush-e4/flagsmith/tree/fix/ld-importer-env-segments-and-mv-rules). It has one commit per bug.
 
-| | Bug | Effect |
+| Issue | Bug | Effect |
 |---|---|---|
-| 1 | A segment override in one environment is linked to **another environment's** segment | Users are targeted with the wrong environment's segment members |
-| 2 | Rules on multivariate flags that serve a fixed variation import as **0% for every variation** | Matching users get the control value instead of the rule's variation |
+| [#9032](https://github.com/Flagsmith/flagsmith/issues/9032) | A segment override in one environment is linked to **another environment's** segment | Users are targeted with the wrong environment's segment members |
+| [#9033](https://github.com/Flagsmith/flagsmith/issues/9033) | Rules on multivariate flags that serve a fixed variation import as **0% for every variation** | Matching users get the control value instead of the rule's variation |
 
 ## How we came across them
 

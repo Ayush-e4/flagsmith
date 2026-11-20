@@ -6,7 +6,7 @@ Each fix has its own branch, which holds only the change:
 |---|---|---|
 | [#8721](https://github.com/Flagsmith/flagsmith/issues/8721) | `fix/ld-importer-segment-or-8721` | The LaunchDarkly importer joined segment rules with AND instead of OR |
 | [#8261](https://github.com/Flagsmith/flagsmith/issues/8261) | `fix/audit-log-attribution-8261` | The audit log didn't show which Master API key made a change |
-| new (not yet filed) | `fix/ld-importer-env-segments-and-mv-rules` | Two more LaunchDarkly importer bugs: segment overrides linked to another environment's segment, and rules on multivariate flags imported as 0%. See [`launchdarkly-import-bugs/`](launchdarkly-import-bugs/) |
+| [#9032](https://github.com/Flagsmith/flagsmith/issues/9032), [#9033](https://github.com/Flagsmith/flagsmith/issues/9033) | `fix/ld-importer-env-segments-and-mv-rules` | Two more LaunchDarkly importer bugs: segment overrides linked to another environment's segment, and rules on multivariate flags imported as 0%. See [`launchdarkly-import-bugs/`](launchdarkly-import-bugs/) |
 
 This branch (`sample-apps`) holds the small sample apps used to show each fix working end to end, along with their recorded output.
 
